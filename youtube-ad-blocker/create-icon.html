@@ -1,82 +1,34 @@
-<!-- This file can be used to create a popup when the user clicks on the extension's icon in the browser. You could provide options here to enable/disable the blocker. -->
 <!DOCTYPE html>
 <html>
   <head>
     <title>lt-ytb-adb</title>
     <style>
-      :root {
-        --primary-color: #ff0000;
-        --bg-color: #ffffff;
-        --text-color: #333333;
-        --transition-speed: 0.3s;
-      }
-
+      /* Add your CSS here */
       body {
-        width: 300px;
-        padding: 16px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen;
-        background: var(--bg-color);
-        color: var(--text-color);
-        margin: 0;
-        transition: all var(--transition-speed) ease;
+        font-family: Arial, sans-serif;
+        padding: 10px;
       }
-
       .container {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
+        max-width: 300px;
+        margin: 0 auto;
       }
-
       .header {
         display: flex;
-        align-items: center;
         justify-content: space-between;
+        align-items: center;
       }
-
-      .stats {
-        background: #f5f5f5;
-        padding: 12px;
-        border-radius: 8px;
-        font-size: 14px;
-      }
-
-      .button {
-        padding: 8px 16px;
-        border: none;
-        border-radius: 4px;
-        background: var(--primary-color);
-        color: white;
-        cursor: pointer;
-        transition: opacity var(--transition-speed) ease;
-      }
-
-      .button:disabled {
-        opacity: 0.7;
-        cursor: not-allowed;
-      }
-
-      .status {
-        font-size: 12px;
-        height: 20px;
-        color: #666;
-      }
-
-      /* Switch toggle styles */
       .switch {
         position: relative;
         display: inline-block;
-        width: 50px;
-        height: 24px;
+        width: 60px;
+        height: 34px;
       }
-
       .switch input {
         opacity: 0;
         width: 0;
         height: 0;
       }
-
-      .switch::after {
-        content: '';
+      .slider {
         position: absolute;
         cursor: pointer;
         top: 0;
@@ -85,38 +37,41 @@
         bottom: 0;
         background-color: #ccc;
         transition: .4s;
-        border-radius: 24px;
+        border-radius: 34px;
       }
-
-      .switch input:checked + .switch::after {
-        background-color: var(--primary-color);
-      }
-
-      .switch::before {
-        content: '';
+      .slider:before {
         position: absolute;
-        height: 20px;
-        width: 20px;
-        left: 2px;
-        bottom: 2px;
+        content: "";
+        height: 26px;
+        width: 26px;
+        left: 4px;
+        bottom: 4px;
         background-color: white;
         transition: .4s;
         border-radius: 50%;
       }
-
-      .switch input:checked + .switch::before {
+      input:checked + .slider {
+        background-color: #2196F3;
+      }
+      input:checked + .slider:before {
         transform: translateX(26px);
       }
-
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg-color: #222222;
-          --text-color: #ffffff;
-        }
-        
-        .stats {
-          background: #333333;
-        }
+      .button {
+        width: 100%;
+        padding: 10px;
+        margin-top: 10px;
+        background-color: #2196F3;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      .button:disabled {
+        background-color: #ccc;
+      }
+      .status {
+        margin-top: 10px;
+        color: red;
       }
     </style>
   </head>
@@ -124,9 +79,10 @@
     <div class="container">
       <div class="header">
         <h3>YouTube Ad Blocker</h3>
-        <div class="switch">
-          <input type="checkbox" id="enableToggle">
-        </div>
+        <label class="switch" aria-label="Toggle Ad Blocking">
+          <input type="checkbox" id="enableToggle" aria-label="Enable/Disable Ad Blocking">
+          <span class="slider"></span>
+        </label>
       </div>
       
       <div class="stats">
@@ -134,8 +90,8 @@
         <div>Total Ads Blocked: <span id="statsTotal">0</span></div>
       </div>
 
-      <button id="quickScanBtn" class="button">Quick Scan</button>
-      <div id="status" class="status"></div>
+      <button id="quickScanBtn" class="button" aria-label="Perform a quick scan for ads">Quick Scan</button>
+      <div id="status" class="status" aria-live="polite"></div>
     </div>
 
     <script>
@@ -154,8 +110,13 @@
 
         async init() {
           this.setupEventListeners();
-          await this.loadState();
-          await this.updateStats();
+          try {
+            await this.loadState();
+            await this.updateStats();
+          } catch (error) {
+            console.error('Error initializing popup:', error);
+            this.showStatus('Failed to load settings', 5000);
+          }
         }
 
         setupEventListeners() {
@@ -183,34 +144,44 @@
         }
 
         async handleToggle(event) {
-          await this.sendMessage({
-            action: 'setState',
-            enabled: event.target.checked
-          });
-          
-          this.showStatus(
-            `Ad blocking ${event.target.checked ? 'enabled' : 'disabled'}`
-          );
+          try {
+            await this.sendMessage({
+              action: 'setState',
+              enabled: event.target.checked
+            });
+            
+            this.showStatus(
+              `Ad blocking ${event.target.checked ? 'enabled' : 'disabled'}`
+            );
+          } catch (error) {
+            console.error('Error toggling ad blocking:', error);
+            this.showStatus('Failed to toggle ad blocking', 5000);
+          }
         }
 
         async handleQuickScan() {
           this.elements.quickScanBtn.disabled = true;
           this.showStatus('Scanning for ads...');
 
-          const tab = await this.getCurrentTab();
-          if (tab?.id) {
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              function: () => {
-                window.dispatchEvent(new CustomEvent('QUICK_SCAN'));
-              }
-            });
+          try {
+            const tab = await this.getCurrentTab();
+            if (tab?.id) {
+              await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                function: () => {
+                  window.dispatchEvent(new CustomEvent('QUICK_SCAN'));
+                }
+              });
+            }
+          } catch (error) {
+            console.error('Error performing quick scan:', error);
+            this.showStatus('Failed to scan for ads', 5000);
+          } finally {
+            setTimeout(() => {
+              this.elements.quickScanBtn.disabled = false;
+              this.showStatus('Scan complete');
+            }, 1000);
           }
-
-          setTimeout(() => {
-            this.elements.quickScanBtn.disabled = false;
-            this.showStatus('Scan complete');
-          }, 1000);
         }
 
         handleMessage(message) {
@@ -228,8 +199,14 @@
         }
 
         async sendMessage(message) {
-          return new Promise(resolve => {
-            chrome.runtime.sendMessage(message, resolve);
+          return new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage(message, response => {
+              if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+              } else {
+                resolve(response);
+              }
+            });
           });
         }
 

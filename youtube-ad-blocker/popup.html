@@ -1,7 +1,8 @@
-<!-- This file can be used to create a popup when the user clicks on the extension's icon in the browser. You could provide options here to enable/disable the blocker. -->
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>lt-ytb-adb</title>
     <style>
       :root {
@@ -124,8 +125,8 @@
     <div class="container">
       <div class="header">
         <h3>YouTube Ad Blocker</h3>
-        <div class="switch">
-          <input type="checkbox" id="enableToggle">
+        <div class="switch" aria-label="Toggle Ad Blocking">
+          <input type="checkbox" id="enableToggle" aria-label="Enable/Disable Ad Blocking">
         </div>
       </div>
       
@@ -134,8 +135,8 @@
         <div>Total Ads Blocked: <span id="statsTotal">0</span></div>
       </div>
 
-      <button id="quickScanBtn" class="button">Quick Scan</button>
-      <div id="status" class="status"></div>
+      <button id="quickScanBtn" class="button" aria-label="Perform a quick scan for ads">Quick Scan</button>
+      <div id="status" class="status" aria-live="polite"></div>
     </div>
 
     <script>
@@ -154,8 +155,13 @@
 
         async init() {
           this.setupEventListeners();
-          await this.loadState();
-          await this.updateStats();
+          try {
+            await this.loadState();
+            await this.updateStats();
+          } catch (error) {
+            console.error('Error initializing popup:', error);
+            this.showStatus('Failed to load settings', 5000);
+          }
         }
 
         setupEventListeners() {
@@ -183,34 +189,44 @@
         }
 
         async handleToggle(event) {
-          await this.sendMessage({
-            action: 'setState',
-            enabled: event.target.checked
-          });
-          
-          this.showStatus(
-            `Ad blocking ${event.target.checked ? 'enabled' : 'disabled'}`
-          );
+          try {
+            await this.sendMessage({
+              action: 'setState',
+              enabled: event.target.checked
+            });
+            
+            this.showStatus(
+              `Ad blocking ${event.target.checked ? 'enabled' : 'disabled'}`
+            );
+          } catch (error) {
+            console.error('Error toggling ad blocking:', error);
+            this.showStatus('Failed to toggle ad blocking', 5000);
+          }
         }
 
         async handleQuickScan() {
           this.elements.quickScanBtn.disabled = true;
           this.showStatus('Scanning for ads...');
 
-          const tab = await this.getCurrentTab();
-          if (tab?.id) {
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              function: () => {
-                window.dispatchEvent(new CustomEvent('QUICK_SCAN'));
-              }
-            });
+          try {
+            const tab = await this.getCurrentTab();
+            if (tab?.id) {
+              await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                function: () => {
+                  window.dispatchEvent(new CustomEvent('QUICK_SCAN'));
+                }
+              });
+            }
+          } catch (error) {
+            console.error('Error performing quick scan:', error);
+            this.showStatus('Failed to scan for ads', 5000);
+          } finally {
+            setTimeout(() => {
+              this.elements.quickScanBtn.disabled = false;
+              this.showStatus('Scan complete');
+            }, 1000);
           }
-
-          setTimeout(() => {
-            this.elements.quickScanBtn.disabled = false;
-            this.showStatus('Scan complete');
-          }, 1000);
         }
 
         handleMessage(message) {
@@ -228,8 +244,14 @@
         }
 
         async sendMessage(message) {
-          return new Promise(resolve => {
-            chrome.runtime.sendMessage(message, resolve);
+          return new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage(message, response => {
+              if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+              } else {
+                resolve(response);
+              }
+            });
           });
         }
 
