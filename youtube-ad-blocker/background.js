@@ -35,7 +35,7 @@ class AdBlockerService {
       'storage',
       'runtime',
       'tabs',
-      'webRequest'
+      'declarativeNetRequest'
     ];
 
     const missingAPIs = requiredAPIs.filter(api => !browserAPI[api]);
@@ -70,22 +70,6 @@ class AdBlockerService {
   }
 
   setupListeners() {
-    // Listen for webRequest events to block ads
-    browserAPI.webRequest.onBeforeRequest.addListener(
-      (details) => {
-        if (this.state.enabled) {
-          // Example condition to block ads (you need to define the actual conditions)
-          if (details.url.includes('googlevideo.com') && details.url.includes('ad')) {
-            console.log('Blocking ad:', details.url);
-            return { cancel: true }; // Cancel the request to block the ad
-          }
-        }
-        return { cancel: false }; // Allow the request if ad blocking is disabled
-      },
-      { urls: ["<all_urls>"] }, // Listen to all URLs
-      ["blocking"] // Block the request if the condition is met
-    );
-
     // Listen for messages from the popup
     browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.action === 'getState') {
@@ -115,6 +99,45 @@ class AdBlockerService {
     this.state.statsCache.set(dateString, currentCount + count);
     browserAPI.storage.local.set({ stats: Object.fromEntries(this.state.statsCache) });
   }
+
+  async updateRules() {
+    try {
+      const rules = [
+        {
+          id: 1,
+          priority: 1,
+          action: {
+            type: 'block'
+          },
+          condition: {
+            urlFilter: '||googlevideo.com/*adformat*',
+            resourceTypes: ['media']
+          }
+        },
+        {
+          id: 2,
+          priority: 1,
+          action: {
+            type: 'block'
+          },
+          condition: {
+            urlFilter: '||youtube.com/*ad*',
+            resourceTypes: ['media', 'script', 'stylesheet']
+          }
+        }
+      ];
+
+      await browserAPI.declarativeNetRequest.updateDynamicRules({
+        addRules: rules,
+        removeRuleIds: [1, 2] // Remove existing rules with the same IDs
+      });
+
+      console.log('Rules updated:', rules);
+    } catch (error) {
+      console.error('Error updating rules:', error);
+    }
+  }
 }
 
-new AdBlockerService();
+const adBlockerService = new AdBlockerService();
+adBlockerService.updateRules(); // Update rules on initialization
