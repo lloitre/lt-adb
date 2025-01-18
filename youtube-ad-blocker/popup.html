@@ -1,0 +1,265 @@
+<!-- This file can be used to create a popup when the user clicks on the extension's icon in the browser. You could provide options here to enable/disable the blocker. -->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>lt-ytb-adb</title>
+    <style>
+      :root {
+        --primary-color: #ff0000;
+        --bg-color: #ffffff;
+        --text-color: #333333;
+        --transition-speed: 0.3s;
+      }
+
+      body {
+        width: 300px;
+        padding: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen;
+        background: var(--bg-color);
+        color: var(--text-color);
+        margin: 0;
+        transition: all var(--transition-speed) ease;
+      }
+
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .stats {
+        background: #f5f5f5;
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+
+      .button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        background: var(--primary-color);
+        color: white;
+        cursor: pointer;
+        transition: opacity var(--transition-speed) ease;
+      }
+
+      .button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+      }
+
+      .status {
+        font-size: 12px;
+        height: 20px;
+        color: #666;
+      }
+
+      /* Switch toggle styles */
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 24px;
+      }
+
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .switch::after {
+        content: '';
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 24px;
+      }
+
+      .switch input:checked + .switch::after {
+        background-color: var(--primary-color);
+      }
+
+      .switch::before {
+        content: '';
+        position: absolute;
+        height: 20px;
+        width: 20px;
+        left: 2px;
+        bottom: 2px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+      }
+
+      .switch input:checked + .switch::before {
+        transform: translateX(26px);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg-color: #222222;
+          --text-color: #ffffff;
+        }
+        
+        .stats {
+          background: #333333;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h3>YouTube Ad Blocker</h3>
+        <div class="switch">
+          <input type="checkbox" id="enableToggle">
+        </div>
+      </div>
+      
+      <div class="stats">
+        <div>Ads Blocked Today: <span id="statsToday">0</span></div>
+        <div>Total Ads Blocked: <span id="statsTotal">0</span></div>
+      </div>
+
+      <button id="quickScanBtn" class="button">Quick Scan</button>
+      <div id="status" class="status"></div>
+    </div>
+
+    <script>
+      class PopupController {
+        constructor() {
+          this.elements = {
+            enableToggle: document.getElementById('enableToggle'),
+            quickScanBtn: document.getElementById('quickScanBtn'),
+            statsToday: document.getElementById('statsToday'),
+            statsTotal: document.getElementById('statsTotal'),
+            status: document.getElementById('status')
+          };
+
+          this.init();
+        }
+
+        async init() {
+          this.setupEventListeners();
+          await this.loadState();
+          await this.updateStats();
+        }
+
+        setupEventListeners() {
+          this.elements.enableToggle.addEventListener('change', 
+            this.handleToggle.bind(this)
+          );
+          
+          this.elements.quickScanBtn.addEventListener('click',
+            this.handleQuickScan.bind(this)
+          );
+
+          chrome.runtime.onMessage.addListener(
+            this.handleMessage.bind(this)
+          );
+        }
+
+        async loadState() {
+          const { enabled } = await this.sendMessage({ action: 'getState' });
+          this.elements.enableToggle.checked = enabled;
+        }
+
+        async updateStats() {
+          const stats = await this.getStats();
+          this.updateStatsDisplay(stats);
+        }
+
+        async handleToggle(event) {
+          await this.sendMessage({
+            action: 'setState',
+            enabled: event.target.checked
+          });
+          
+          this.showStatus(
+            `Ad blocking ${event.target.checked ? 'enabled' : 'disabled'}`
+          );
+        }
+
+        async handleQuickScan() {
+          this.elements.quickScanBtn.disabled = true;
+          this.showStatus('Scanning for ads...');
+
+          const tab = await this.getCurrentTab();
+          if (tab?.id) {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              function: () => {
+                window.dispatchEvent(new CustomEvent('QUICK_SCAN'));
+              }
+            });
+          }
+
+          setTimeout(() => {
+            this.elements.quickScanBtn.disabled = false;
+            this.showStatus('Scan complete');
+          }, 1000);
+        }
+
+        handleMessage(message) {
+          if (message.action === 'statsUpdate') {
+            this.updateStatsDisplay(message.stats);
+          }
+        }
+
+        async getCurrentTab() {
+          const [tab] = await chrome.tabs.query({ 
+            active: true, 
+            currentWindow: true 
+          });
+          return tab;
+        }
+
+        async sendMessage(message) {
+          return new Promise(resolve => {
+            chrome.runtime.sendMessage(message, resolve);
+          });
+        }
+
+        async getStats() {
+          const { stats } = await this.sendMessage({ action: 'getState' });
+          return stats;
+        }
+
+        updateStatsDisplay(stats) {
+          const today = new Date().toDateString();
+          const todayStats = Object.entries(stats)
+            .filter(([date]) => new Date(date).toDateString() === today)
+            .reduce((sum, [_, count]) => sum + count, 0);
+
+          const totalStats = Object.values(stats)
+            .reduce((sum, count) => sum + count, 0);
+
+          this.elements.statsToday.textContent = todayStats;
+          this.elements.statsTotal.textContent = totalStats;
+        }
+
+        showStatus(message, duration = 2000) {
+          this.elements.status.textContent = message;
+          setTimeout(() => {
+            this.elements.status.textContent = '';
+          }, duration);
+        }
+      }
+
+      new PopupController();
+    </script>
+  </body>
+</html>

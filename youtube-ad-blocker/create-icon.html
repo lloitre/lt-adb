@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Icon</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen;
+            padding: 20px;
+        }
+        .instructions {
+            margin: 20px 0;
+            text-align: center;
+        }
+        #downloadBtn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: #FF0000;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Create Icon for YouTube Ad Blocker</h1>
+    <canvas id="iconCanvas" width="128" height="128"></canvas>
+    <div class="instructions">
+        <p>This tool generates the icon files required by manifest.json</p>
+        <button id="downloadBtn">Download All Icons</button>
+    </div>
+    <script>
+        const canvas = document.getElementById('iconCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function drawIcon(size) {
+            canvas.width = size;
+            canvas.height = size;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, size, size);
+
+            // Background
+            ctx.fillStyle = '#FF0000';
+            ctx.fillRect(0, 0, size, size);
+
+            // Scale values based on size
+            const scale = size / 128;
+            
+            // YouTube play button shape
+            ctx.beginPath();
+            ctx.fillStyle = 'white';
+            ctx.moveTo(45 * scale, 35 * scale);
+            ctx.lineTo(45 * scale, 93 * scale);
+            ctx.lineTo(95 * scale, 64 * scale);
+            ctx.closePath();
+            ctx.fill();
+
+            // Red strike-through line
+            ctx.beginPath();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 12 * scale;
+            ctx.moveTo(30 * scale, 30 * scale);
+            ctx.lineTo(98 * scale, 98 * scale);
+            ctx.stroke();
+        }
+
+        // Draw initial preview icon
+        drawIcon(128);
+
+        // Add download functionality for all sizes
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            const sizes = [16, 48, 128];
+            sizes.forEach(size => {
+                drawIcon(size);
+                const link = document.createElement('a');
+                link.download = `icon${size}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        });
+    </script>
+</body>
+</html>
